@@ -30,7 +30,7 @@ int main() {
         error_handling("connect() error");
 
     while (1) {
-        printf("Enter command (INFO, SET_PASSWORD <locker_num> <password>, STORE <locker_num> <password> <content>, RETRIEVE <locker_num> <password>, GET_CODE <locker_num>, CHECK_CODE <locker_num> <code>): ");
+        printf("Enter command:\n{locker(show locker information)\npassword <locker_num> <password>\nstore<locker_num> <password> <content>\nshow <locker_num> <password>} ");
         fgets(message, BUF_SIZE, stdin);
         message[strcspn(message, "\n")] = 0;  // Remove newline character
 
@@ -48,3 +48,4 @@ int main() {
     close(sock);
     return 0;
 }
+
