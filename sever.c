@@ -45,7 +45,7 @@ void* handle_client(void* arg) {
         sscanf(buffer, "%s", command);
 
         if (strcmp(command, "info") == 0) {
-            strcpy(response, "Available lockers:\n");
+            strcpy(response, "---Available lockers---\n");
             for (int i = 0; i < MAX_LOCKERS; i++) {
                 char status[BUF_SIZE];
                 snprintf(status, BUF_SIZE, "(%s) Locker %d: %s\n",
@@ -62,9 +62,9 @@ void* handle_client(void* arg) {
                 strcpy(lockers[locker_num - 1].password, password);
                 if (lockers[locker_num - 1].high_level) {
                     generate_code(lockers[locker_num - 1].code, CODE_SIZE);
-                    snprintf(response, BUF_SIZE, "Password set for locker %d.\nHigh level code: %s\n", locker_num, lockers[locker_num - 1].code);
+                    snprintf(response, BUF_SIZE, "Password set for Locker %d\nComplete\n!!High level code: %s\n", locker_num, lockers[locker_num - 1].code);
                 } else {
-                    snprintf(response, BUF_SIZE, "Password set for locker %d\n", locker_num);
+                    snprintf(response, BUF_SIZE, "Password set for Locker %d\nComplete\n", locker_num);
                 }
             }
         } else if (strcmp(command, "store") == 0) {

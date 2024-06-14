@@ -14,38 +14,38 @@ void error_handling(char *message) {
 }
 
 void show_menu() {
-    printf("\n=========MENU=========\n");
+    printf("\n==========MENU==========\n");
     printf("1. information of lockers\n");
     printf("2. set password\n");
     printf("3. store contents\n");
     printf("4. show locker\n");
     printf("5. end\n");
     printf("=========================\n");
-    printf("CHOOSE MENU: ");
+    printf("+CHOOSE MENU: ");
 }
 
 void password_instructions(int locker_num) {
     printf("=========PASSWORD=========\n");
-    printf("how to: password %d <your password>\n", locker_num);
+    printf("HOW TO: password %d <your password>\n", locker_num);
 }
 
 void store_instructions(int locker_num, int high_level) {
     if (high_level) {
         printf("=========STORE=========\n");
-        printf("how to: store %d <your password> <high level code> <content>\n", locker_num);
+        printf("HOW TO: store %d <your password> <high level code> <content>\n", locker_num);
     } else {
         printf("=========STORE=========\n");
-        printf("how to: store %d <your password> <content>\n", locker_num);
+        printf("HOW TO: store %d <your password> <content>\n", locker_num);
     }
 }
 
 void show_instructions(int locker_num, int high_level) {
     if (high_level) {
         printf("=========SHOW========\n");
-        printf("how to: show %d <your password> <high level code>\n", locker_num);
+        printf("HOW TO: show %d <your password> <high level code>\n", locker_num);
     } else {
         printf("=========SHOW========\n");
-        printf("how to: show %d <your password>\n", locker_num);
+        printf("HOW TO--> show %d <your password>\n", locker_num);
     }
 }
 
@@ -81,11 +81,11 @@ int main() {
                 str_len = read(sock, message, BUF_SIZE - 1);
                 if (str_len == -1) error_handling("read() error");
                 message[str_len] = 0;
-                printf("서버 응답: %s\n", message);
-                break;
+                printf("%s\n", message);
+                continue;
 
             case 2:
-                printf("CHOOSE LOCKER: ");
+                printf("++CHOOSE LOCKER: ");
                 fgets(message, BUF_SIZE, stdin);
                 int locker_num = atoi(message);
                 if (locker_num < 1 || locker_num > MAX_LOCKERS) {
@@ -93,41 +93,41 @@ int main() {
                     continue;
                 }
                 password_instructions(locker_num);
-                printf("명령어를 입력하세요: ");
+                printf("+++ENTER COMMEND: ");
                 fgets(message, BUF_SIZE, stdin);
                 message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
                 break;
 
             case 3:
-                printf("사물함 번호를 입력하세요: ");
+                printf("++CHOOSE LOCKER: ");
                 fgets(message, BUF_SIZE, stdin);
                 locker_num = atoi(message);
                 if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                    printf("잘못된 사물함 번호입니다. 다시 시도하세요.\n");
+                    printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
                     continue;
                 }
                 store_instructions(locker_num, locker_high_level[locker_num - 1]);
-                printf("명령어를 입력하세요: ");
+                printf("+++ENTER COMMEND: ");
                 fgets(message, BUF_SIZE, stdin);
                 message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
                 break;
 
             case 4:
-                printf("사물함 번호를 입력하세요: ");
+                printf("++CHOOSE LOCKER: ");
                 fgets(message, BUF_SIZE, stdin);
                 locker_num = atoi(message);
                 if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                    printf("잘못된 사물함 번호입니다. 다시 시도하세요.\n");
+                    printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
                     continue;
                 }
                 show_instructions(locker_num, locker_high_level[locker_num - 1]);
-                printf("명령어를 입력하세요: ");
+                printf("+++ENTER COMMAND: ");
                 fgets(message, BUF_SIZE, stdin);
                 message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
                 break;
 
             default:
-                printf("잘못된 선택입니다. 다시 시도하세요.\n");
+                printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
                 continue;
         }
 
@@ -135,7 +135,7 @@ int main() {
         str_len = read(sock, message, BUF_SIZE - 1);
         if (str_len == -1) error_handling("read() error");
         message[str_len] = 0;
-        printf("서버 응답: %s\n", message);
+        printf("%s\n", message);
     }
 
     close(sock);
