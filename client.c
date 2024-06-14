@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #define PORT 9999
 #define BUF_SIZE 1024
@@ -30,11 +31,11 @@ int main() {
         error_handling("connect() error");
 
     while (1) {
-        printf("Enter command (INFO, SET_PASSWORD <locker_num> <password>, STORE <locker_num> <password> <content>, RETRIEVE <locker_num> <password>, GET_CODE <locker_num>, CHECK_CODE <locker_num> <code>): ");
+        printf("Enter command\n1. INFO\n2. PASSWORD <locker_num> <password>\n3. STORE <locker_num> <password> <code> <content>\n4. SHOW <locker_num> <password>\n5. END\nEnter your number: ");
         fgets(message, BUF_SIZE, stdin);
         message[strcspn(message, "\n")] = 0;  // Remove newline character
 
-        if (strcmp(message, "exit") == 0) break;
+        if (strcmp(message, "5") == 0) break;
 
         write(sock, message, strlen(message));
 
