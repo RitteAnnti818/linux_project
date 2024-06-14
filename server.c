@@ -45,7 +45,9 @@ void* handle_client(void* arg) {
         sscanf(buffer, "%s", command);
 
         if (strcmp(command, "1") == 0) {
-            strcpy(response, "Available lockers:\n");
+            // printf("Go to LOCKER STATUS ..\n");
+            sleep(1);
+            strcpy(response, "Available lockers\n");
             for (int i = 0; i < MAX_LOCKERS; i++) {
                 char status[BUF_SIZE];
                 snprintf(status, BUF_SIZE, "(%s) Locker %d: %s\n",
@@ -54,7 +56,8 @@ void* handle_client(void* arg) {
                          lockers[i].content[0] == '\0' ? "Empty" : "Occupied");
                 strcat(response, status);
             }
-        } else if (strcmp(command, "2") == 0) {
+        } else if (strcmp(command, "2") == 0) {            
+            // HOW TO ..?\nEnter your locker number and password set!\n<locker_num> <password>: 
             sscanf(buffer, "%*s %d %s", &locker_num, password);
             if (locker_num < 1 || locker_num > MAX_LOCKERS) {
                 snprintf(response, BUF_SIZE, "Invalid locker number\n");
@@ -90,9 +93,6 @@ void* handle_client(void* arg) {
             } else {
                 snprintf(response, BUF_SIZE, "Locker %d contains: %.1000s\n", locker_num, lockers[locker_num - 1].content);
             }
-        } else if (strcmp(command, "5") == 0)
-        {
-            /* code */
         }
         
         else {
