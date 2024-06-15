@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <fcntl.h>
 #include <time.h>
 
 #define PORT 9999
@@ -29,43 +28,11 @@ void generate_code(char* code, int length) {
     code[length] = '\0';
 }
 
-void lock_locker(int fd, int locker_num) {
-	struct flock fl;
-	fl.l_type = F_WRLCK;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = locker_num*sizeof(Locker);
-	fl.l_len = sizeof(Locker);
-	
-	if(fcntl(fd, F_SETLKW, &fl) == -1) {
-		perror("fcntl() lock error");
-		exit(1);
-	}
-}
-
-void unlock_locker(int fd, int locker_num) {
-	struct flock fl;
-	fl.l_type = F_UNLCK;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = locker_num * sizeof(Locker);
-	fl.l_len = sizeof(Locker);
-	
-	if (fcntl(fd, F_SETLK, &fl) == -1) {
-		perror("fcntl() unlock error");
-		exit(1);
-	}
-}
-
 void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
 
     char buffer[BUF_SIZE];
-    int fd = open("lockers.dat", O_RDWR | O_CREAT, 0666);
-    if (fd == -1) {
-    	perror("open() error");
-    	exit(1);
-    }
-    
     while (1) {
         memset(buffer, 0, BUF_SIZE);
         int read_size = read(client_socket, buffer, BUF_SIZE - 1);
@@ -78,7 +45,7 @@ void* handle_client(void* arg) {
         sscanf(buffer, "%s", command);
 
         if (strcmp(command, "info") == 0) {
-            strcpy(response, "---Available lockers---\n");
+            strcpy(response, "Available lockers:\n");
             for (int i = 0; i < MAX_LOCKERS; i++) {
                 char status[BUF_SIZE];
                 snprintf(status, BUF_SIZE, "(%s) Locker %d: %s\n",
@@ -92,46 +59,36 @@ void* handle_client(void* arg) {
             if (locker_num < 1 || locker_num > MAX_LOCKERS) {
                 snprintf(response, BUF_SIZE, "Invalid locker number\n");
             } else {
-                lock_locker(fd, locker_num - 1);
                 strcpy(lockers[locker_num - 1].password, password);
                 if (lockers[locker_num - 1].high_level) {
                     generate_code(lockers[locker_num - 1].code, CODE_SIZE);
-                    snprintf(response, BUF_SIZE, "Password set for Locker %d\nComplete\n!!High level code: %s\n", locker_num, lockers[locker_num - 1].code);
+                    snprintf(response, BUF_SIZE, "Password set for locker %d.\nHigh level code: %s\n", locker_num, lockers[locker_num - 1].code);
                 } else {
-                    snprintf(response, BUF_SIZE, "Password set for Locker %d\nComplete\n", locker_num);
+                    snprintf(response, BUF_SIZE, "Password set for locker %d\n", locker_num);
                 }
-                unlock_locker(fd, locker_num - 1);
             }
         } else if (strcmp(command, "store") == 0) {
             sscanf(buffer, "%*s %d %s %s %[^\n]", &locker_num, password, code, content);
             if (locker_num < 1 || locker_num > MAX_LOCKERS) {
                 snprintf(response, BUF_SIZE, "Invalid locker number\n");
+            } else if (strcmp(lockers[locker_num - 1].password, password) != 0) {
+                snprintf(response, BUF_SIZE, "Incorrect password\n");
+            } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
+                snprintf(response, BUF_SIZE, "Incorrect high level code\n");
             } else {
-                lock_locker(fd, locker_num - 1); 
-                if (strcmp(lockers[locker_num - 1].password, password) != 0) {
-                    snprintf(response, BUF_SIZE, "Incorrect password\n");
-                } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
-                    snprintf(response, BUF_SIZE, "Incorrect high level code\n");
-                } else {
-                    strcpy(lockers[locker_num - 1].content, content);
-                    snprintf(response, BUF_SIZE, "Stored in locker %d\n", locker_num);
-                }
-                unlock_locker(fd, locker_num - 1); 
+                strcpy(lockers[locker_num - 1].content, content);
+                snprintf(response, BUF_SIZE, "Stored in locker %d\n", locker_num);
             }
         } else if (strcmp(command, "show") == 0) {
             sscanf(buffer, "%*s %d %s %s", &locker_num, password, code);
             if (locker_num < 1 || locker_num > MAX_LOCKERS) {
                 snprintf(response, BUF_SIZE, "Invalid locker number\n");
+            } else if (strcmp(lockers[locker_num - 1].password, password) != 0) {
+                snprintf(response, BUF_SIZE, "Incorrect password\n");
+            } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
+                snprintf(response, BUF_SIZE, "Incorrect high level code\n");
             } else {
-                lock_locker(fd, locker_num - 1); // 사물함 잠금
-                if (strcmp(lockers[locker_num - 1].password, password) != 0) {
-                    snprintf(response, BUF_SIZE, "Incorrect password\n");
-                } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
-                    snprintf(response, BUF_SIZE, "Incorrect high level code\n");
-                } else {
-                    snprintf(response, BUF_SIZE, "Locker %d contains: %.1000s\n", locker_num, lockers[locker_num - 1].content);
-                }
-                unlock_locker(fd, locker_num - 1); // 사물함 잠금 해제
+                snprintf(response, BUF_SIZE, "Locker %d contains: %.1000s\n", locker_num, lockers[locker_num - 1].content);
             }
         } else {
             snprintf(response, BUF_SIZE, "Unknown command\n");
@@ -145,16 +102,16 @@ void* handle_client(void* arg) {
 }
 
 int main() {
-    srand(time(NULL)); // Initialize random number generator
+    srand(time(NULL)); // 난수 생성기 초기화
 
-	// Initialize lockers
+    // 사물함 초기화
     for (int i = 0; i < MAX_LOCKERS; i++) {
         lockers[i].high_level = (i < 3) ? 1 : 0; // 1, 2, 3번 사물함을 하이레벨로 설정
         lockers[i].code[0] = '\0';
         lockers[i].password[0] = '\0';
         lockers[i].content[0] = '\0';
     }
-	
+
     int server_socket, client_socket, *new_sock;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_size = sizeof(client_addr);
