@@ -13,6 +13,7 @@ typedef struct {
     int in_use;
     int lock_time;
     char items[100];
+    char code[9];    // highlevel locker 코드
 } Locker;
 
 void show_menu() {
@@ -37,8 +38,9 @@ void setup_locker(int client_socket) {
     int choice = 2, locker_id;
     char password[20];
     char items[100];
+    char code[9];
     
-    printf("사물함 번호를 입력하세요: ");
+    printf("사물함 번호를 입력하세요 (1~10): ");
     scanf("%d", &locker_id);
     printf("비밀번호를 설정하세요: ");
     scanf("%s", password);
@@ -54,6 +56,10 @@ void setup_locker(int client_socket) {
     read(client_socket, &result, sizeof(result));
     if (result == 0) {
         printf("Locker %d successfully set up.\n", locker_id);
+        if (locker_id >= 1 && locker_id <= 3) {
+            read(client_socket, code, sizeof(code));
+            printf("Your access code is: %s\n", code);
+        }
     } else {
         printf("Failed to set up Locker %d.\n", locker_id);
     }
@@ -63,8 +69,9 @@ void access_locker(int client_socket) {
     int choice = 3, locker_id;
     char password[20];
     char items[100];
+    char code[9] = "";
     
-    printf("사물함 번호를 입력하세요: ");
+    printf("사물함 번호를 입력하세요 (1~10): ");
     scanf("%d", &locker_id);
     printf("비밀번호를 입력하세요: ");
     scanf("%s", password);
@@ -73,6 +80,12 @@ void access_locker(int client_socket) {
     write(client_socket, &locker_id, sizeof(locker_id));
     write(client_socket, password, sizeof(password));
     
+    if (locker_id >= 1 && locker_id <= 3) {
+        printf("Access code를 입력하세요: ");
+        scanf("%s", code);
+        write(client_socket, code, sizeof(code));
+    }
+    
     int result;
     read(client_socket, &result, sizeof(result));
     if (result == 0) {
@@ -80,7 +93,7 @@ void access_locker(int client_socket) {
         printf("Access to Locker %d granted.\n", locker_id);
         printf("Stored items: %s\n", items);
     } else if (result == -1) {
-        printf("Incorrect password. Locker %d is locked for 15 seconds.\n", locker_id);
+        printf("Incorrect password or code. Locker %d is locked for 15 seconds.\n", locker_id);
     } else if (result == -2) {
         printf("Locker %d is locked. Try again later.\n", locker_id);
     }
