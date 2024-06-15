@@ -4,141 +4,187 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#define PORT 9999
-#define BUF_SIZE 1024
-#define MAX_LOCKERS 10
+#define SERVER_ADDRESS "127.0.0.1"
+#define PORT 12345
 
-void error_handling(char *message) {
-    perror(message);
-    exit(1);
-}
+typedef struct {
+    int id;
+    char password[20];
+    int in_use;
+    int lock_time;
+    char items[100];
+    char code[9];    // highlevel locker 코드
+} Locker;
 
 void show_menu() {
-    printf("\n==========MENU==========\n");
-    printf("1. information of lockers\n");
-    printf("2. set password\n");
-    printf("3. store contents\n");
-    printf("4. show locker\n");
-    printf("5. end\n");
-    printf("=========================\n");
-    printf("+CHOOSE MENU: ");
+    printf("1. 사물함 정보\n");
+    printf("2. 사물함 설정 (비밀번호 및 물건 저장)\n");
+    printf("3. 사물함 접근 (비밀번호 확인 및 물건 반환)\n");
+    printf("4. 비밀번호 변경\n");
+    printf("5. 사물함 힌트 요청\n");
+    printf("6. 종료\n");
 }
 
-void password_instructions(int locker_num) {
-    printf("=========PASSWORD=========\n");
-    printf("HOW TO: password %d <your password>\n", locker_num);
-}
-
-void store_instructions(int locker_num, int high_level) {
-    if (high_level) {
-        printf("=========STORE=========\n");
-        printf("HOW TO: store %d <your password> <high level code> <content>\n", locker_num);
-    } else {
-        printf("=========STORE=========\n");
-        printf("HOW TO: store %d <your password> <content>\n", locker_num);
+void locker_info(int client_socket) {
+    int choice = 1;
+    write(client_socket, &choice, sizeof(choice));
+    Locker lockers[10];
+    for (int i = 0; i < 10; i++) {
+        read(client_socket, &lockers[i], sizeof(Locker));
+        printf("Locker %d: %s\n", lockers[i].id, lockers[i].in_use ? "In Use" : "Available");
     }
 }
 
-void show_instructions(int locker_num, int high_level) {
-    if (high_level) {
-        printf("=========SHOW========\n");
-        printf("HOW TO: show %d <your password> <high level code>\n", locker_num);
+void setup_locker(int client_socket) {
+    int choice = 2, locker_id;
+    char password[20];
+    char items[100];
+    char code[9];
+    
+    printf("사물함 번호를 입력하세요 (1~10): ");
+    scanf("%d", &locker_id);
+    printf("비밀번호를 설정하세요: ");
+    scanf("%s", password);
+    printf("저장할 물건을 입력하세요: ");
+    scanf(" %[^\n]", items);
+    
+    write(client_socket, &choice, sizeof(choice));
+    write(client_socket, &locker_id, sizeof(locker_id));
+    write(client_socket, password, sizeof(password));
+    write(client_socket, items, sizeof(items));
+    
+    int result;
+    read(client_socket, &result, sizeof(result));
+    if (result == 0) {
+        printf("Locker %d successfully set up.\n", locker_id);
+        if (locker_id >= 1 && locker_id <= 3) {
+            read(client_socket, code, sizeof(code));
+            printf("Your access code is: %s\n", code);
+        }
     } else {
-        printf("=========SHOW========\n");
-        printf("HOW TO--> show %d <your password>\n", locker_num);
+        printf("Failed to set up Locker %d.\n", locker_id);
     }
+}
+
+void access_locker(int client_socket) {
+    int choice = 3, locker_id;
+    char password[20];
+    char items[100];
+    char code[9] = "";
+    
+    printf("사물함 번호를 입력하세요 (1~10): ");
+    scanf("%d", &locker_id);
+    printf("비밀번호를 입력하세요: ");
+    scanf("%s", password);
+    
+    write(client_socket, &choice, sizeof(choice));
+    write(client_socket, &locker_id, sizeof(locker_id));
+    write(client_socket, password, sizeof(password));
+    
+    if (locker_id >= 1 && locker_id <= 3) {
+        printf("Access code를 입력하세요: ");
+        scanf("%s", code);
+        write(client_socket, code, sizeof(code));
+    }
+    
+    int result;
+    read(client_socket, &result, sizeof(result));
+    if (result == 0) {
+        read(client_socket, items, sizeof(items));
+        printf("Access to Locker %d granted.\n", locker_id);
+        printf("Stored items: %s\n", items);
+    } else if (result == -1) {
+        printf("Incorrect password or code. Locker %d is locked for 15 seconds.\n", locker_id);
+    } else if (result == -2) {
+        printf("Locker %d is locked. Try again later.\n", locker_id);
+    }
+}
+
+void change_password(int client_socket) {
+    int choice = 4, locker_id;
+    char current_password[20], new_password[20], confirm_password[20];
+    
+    printf("사물함 번호를 입력하세요: ");
+    scanf("%d", &locker_id);
+    printf("현재 비밀번호를 입력하세요: ");
+    scanf("%s", current_password);
+    printf("새로운 비밀번호를 입력하세요: ");
+    scanf("%s", new_password);
+    printf("비밀번호 확인을 입력하세요: ");
+    scanf("%s", confirm_password);
+    
+    if (strcmp(new_password, confirm_password) != 0) {
+        printf("비밀번호가 일치하지 않습니다.\n");
+        return;
+    }
+    
+    write(client_socket, &choice, sizeof(choice));
+    write(client_socket, &locker_id, sizeof(locker_id));
+    write(client_socket, current_password, sizeof(current_password));
+    write(client_socket, new_password, sizeof(new_password));
+    
+    int result;
+    read(client_socket, &result, sizeof(result));
+    if (result == 0) {
+        printf("비밀번호가 성공적으로 변경되었습니다.\n");
+    } else {
+        printf("비밀번호 변경에 실패했습니다.\n");
+    }
+}
+
+void request_hint(int client_socket) {
+    int choice = 5, locker_id;
+    printf("사물함 번호를 입력하세요: ");
+    scanf("%d", &locker_id);
+    
+    write(client_socket, &choice, sizeof(choice));
+    write(client_socket, &locker_id, sizeof(locker_id));
+    
+    char hint[100];
+    read(client_socket, hint, sizeof(hint));
+    printf("Hint for locker %d: %s\n", locker_id, hint);
 }
 
 int main() {
-    int sock;
-    struct sockaddr_in serv_addr;
-    char message[BUF_SIZE];
-    int str_len;
-    int locker_high_level[MAX_LOCKERS] = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0};  // 하이레벨 사물함 정보
-
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1) error_handling("socket() error");
-
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    serv_addr.sin_port = htons(PORT);
-
-    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
-        error_handling("connect() error");
-
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in server_addr;
+    
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
+    server_addr.sin_port = htons(PORT);
+    
+    connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    
+    int choice;
     while (1) {
         show_menu();
-        fgets(message, BUF_SIZE, stdin);
-        int choice = atoi(message);
-
-        if (choice == 5) break;
-
+        printf("선택하세요: ");
+        scanf("%d", &choice);
+        
         switch (choice) {
             case 1:
-                strcpy(message, "info");
-                write(sock, message, strlen(message));
-                str_len = read(sock, message, BUF_SIZE - 1);
-                if (str_len == -1) error_handling("read() error");
-                message[str_len] = 0;
-                printf("%s\n", message);
-                continue;
-
+                locker_info(client_socket);
+                break;
             case 2:
-                printf("++CHOOSE LOCKER: ");
-                fgets(message, BUF_SIZE, stdin);
-                int locker_num = atoi(message);
-                if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                    printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
-                    continue;
-                }
-                password_instructions(locker_num);
-                printf("+++ENTER COMMEND: ");
-                fgets(message, BUF_SIZE, stdin);
-                message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
+                setup_locker(client_socket);
                 break;
-
             case 3:
-                printf("++CHOOSE LOCKER: ");
-                fgets(message, BUF_SIZE, stdin);
-                locker_num = atoi(message);
-                if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                    printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
-                    continue;
-                }
-                store_instructions(locker_num, locker_high_level[locker_num - 1]);
-                printf("+++ENTER COMMEND: ");
-                fgets(message, BUF_SIZE, stdin);
-                message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
+                access_locker(client_socket);
                 break;
-
             case 4:
-                printf("++CHOOSE LOCKER: ");
-                fgets(message, BUF_SIZE, stdin);
-                locker_num = atoi(message);
-                if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                    printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
-                    continue;
-                }
-                show_instructions(locker_num, locker_high_level[locker_num - 1]);
-                printf("+++ENTER COMMAND: ");
-                fgets(message, BUF_SIZE, stdin);
-                message[strcspn(message, "\n")] = 0;  // 개행 문자 제거
+                change_password(client_socket);
                 break;
-
+            case 5:
+                request_hint(client_socket);
+                break;
+            case 6:
+                close(client_socket);
+                exit(0);
             default:
-                printf("WORNG LOCKER NUMBER.\nCHOOSE AGIAN.\n");
-                continue;
+                printf("잘못된 선택입니다.\n");
         }
-
-        write(sock, message, strlen(message));
-        str_len = read(sock, message, BUF_SIZE - 1);
-        if (str_len == -1) error_handling("read() error");
-        message[str_len] = 0;
-        printf("%s\n", message);
     }
-
-    close(sock);
+    
     return 0;
 }
 
