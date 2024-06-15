@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <time.h>
 #include <pthread.h>
 #include <arpa/inet.h>
@@ -20,7 +21,6 @@ typedef struct {
 } Locker;
 
 Locker lockers[MAX_LOCKERS];
-pthread_mutex_t locker_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void init_server() {
     for (int i = 0; i < MAX_LOCKERS; i++) {
@@ -36,9 +36,7 @@ void init_server() {
 void* lock_timer(void* arg) {
     int locker_id = *(int*)arg;
     sleep(LOCK_TIME);
-    pthread_mutex_lock(&locker_mutex);
     lockers[locker_id].lock_time = 0;
-    pthread_mutex_unlock(&locker_mutex);
     return NULL;
 }
 
@@ -52,9 +50,7 @@ void generate_random_code(char *code, size_t length) {
 }
 
 int allocate_locker(int locker_id, const char *password, const char *items, char *code) {
-    pthread_mutex_lock(&locker_mutex);
     if (lockers[locker_id].in_use) {
-        pthread_mutex_unlock(&locker_mutex);
         return -1;
     }
     lockers[locker_id].in_use = 1;
@@ -64,14 +60,11 @@ int allocate_locker(int locker_id, const char *password, const char *items, char
         generate_random_code(code, 8);
         strcpy(lockers[locker_id].code, code);
     }
-    pthread_mutex_unlock(&locker_mutex);
     return 0;
 }
 
 int access_locker(int locker_id, const char *password, const char *code, char *items) {
-    pthread_mutex_lock(&locker_mutex);
     if (lockers[locker_id].lock_time > 0) {
-        pthread_mutex_unlock(&locker_mutex);
         return -2;
     }
     if (strcmp(lockers[locker_id].password, password) != 0 || (locker_id >= 1 && locker_id <= 3 && strcmp(lockers[locker_id].code, code) != 0)) {
@@ -79,47 +72,53 @@ int access_locker(int locker_id, const char *password, const char *code, char *i
         pthread_t tid;
         pthread_create(&tid, NULL, lock_timer, &lockers[locker_id].id);
         pthread_detach(tid);
-        pthread_mutex_unlock(&locker_mutex);
         return -1;
     }
     strcpy(items, lockers[locker_id].items); // 물건 정보 반환
-    pthread_mutex_unlock(&locker_mutex);
     return 0;
 }
 
 int store_items(int locker_id, const char *items) {
-    pthread_mutex_lock(&locker_mutex);
     if (lockers[locker_id].in_use) {
         strcpy(lockers[locker_id].items, items);
-        pthread_mutex_unlock(&locker_mutex);
         return 0;
     }
-    pthread_mutex_unlock(&locker_mutex);
     return -1;
 }
 
 int change_password(int locker_id, const char *current_password, const char *new_password) {
-    pthread_mutex_lock(&locker_mutex);
     if (strcmp(lockers[locker_id].password, current_password) == 0) {
         strcpy(lockers[locker_id].password, new_password);
-        pthread_mutex_unlock(&locker_mutex);
         return 0;
     }
-    pthread_mutex_unlock(&locker_mutex);
     return -1;
 }
 
 void show_lockers() {
-    pthread_mutex_lock(&locker_mutex);
     for (int i = 0; i < MAX_LOCKERS; i++) {
         printf("Locker %d: %s\n", i, lockers[i].in_use ? "In Use" : "Available");
     }
-    pthread_mutex_unlock(&locker_mutex);
+}
+
+int lock_record(int fd, int locker_id, short lock_type) {
+    struct flock fl;
+    fl.l_type = lock_type;
+    fl.l_start = locker_id * sizeof(Locker);
+    fl.l_whence = SEEK_SET;
+    fl.l_len = sizeof(Locker);
+    return fcntl(fd, F_SETLKW, &fl);
 }
 
 void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
+    
+    int fd = open("lockers.dat", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        perror("Error opening lockers.dat");
+        close(client_socket);
+        return NULL;
+    }
     
     while (1) {
         int choice, locker_id;
@@ -130,21 +129,26 @@ void* handle_client(void* arg) {
         
         switch (choice) {
             case 1:
-                pthread_mutex_lock(&locker_mutex);
+                show_lockers();
                 for (int i = 0; i < MAX_LOCKERS; i++) {
                     write(client_socket, &lockers[i], sizeof(Locker));
                 }
-                pthread_mutex_unlock(&locker_mutex);
                 break;
             case 2:
                 read(client_socket, &locker_id, sizeof(locker_id));
                 read(client_socket, password, sizeof(password));
                 read(client_socket, items, sizeof(items));
+
+                // 레코드 잠금 설정
+                lock_record(fd, locker_id, F_WRLCK);
                 int allocate_result = allocate_locker(locker_id, password, items, code);
                 write(client_socket, &allocate_result, sizeof(allocate_result));
                 if (allocate_result == 0 && locker_id >= 1 && locker_id <= 3) {
                     write(client_socket, code, sizeof(code));
                 }
+                
+                // 레코드 잠금 해제
+                lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 3:
                 read(client_socket, &locker_id, sizeof(locker_id));
@@ -152,22 +156,35 @@ void* handle_client(void* arg) {
                 if (locker_id >= 1 && locker_id <= 3) {
                     read(client_socket, code, sizeof(code));
                 }
+
+                // 레코드 잠금 설정
+                lock_record(fd, locker_id, F_RDLCK);
                 int access_result = access_locker(locker_id, password, locker_id >= 1 && locker_id <= 3 ? code : "", items);
                 write(client_socket, &access_result, sizeof(access_result));
                 if (access_result == 0) {
                     write(client_socket, items, sizeof(items));
                 }
+
+                // 레코드 잠금 해제
+                lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 4:
                 read(client_socket, &locker_id, sizeof(locker_id));
                 read(client_socket, password, sizeof(password));
                 char new_password[20];
                 read(client_socket, new_password, sizeof(new_password));
+
+                // 레코드 잠금 설정
+                lock_record(fd, locker_id, F_WRLCK);
                 int change_result = change_password(locker_id, password, new_password);
                 write(client_socket, &change_result, sizeof(change_result));
+
+                // 레코드 잠금 해제
+                lock_record(fd, locker_id, F_UNLCK);
                 break;
             default:
                 close(client_socket);
+                close(fd);
                 return NULL;
         }
     }
