@@ -23,7 +23,7 @@ typedef struct {
 Locker lockers[MAX_LOCKERS];
 
 void init_server() {
-    for (int i = 0; i < MAX_LOCKERS; i++) {
+    for (int i = 1; i <= MAX_LOCKERS; i++) {
         lockers[i].id = i;
         strcpy(lockers[i].password, "");
         lockers[i].in_use = 0;
@@ -95,8 +95,12 @@ int change_password(int locker_id, const char *current_password, const char *new
 }
 
 void show_lockers() {
-    for (int i = 0; i < MAX_LOCKERS; i++) {
-        printf("Locker %d: %s\n", i, lockers[i].in_use ? "In Use" : "Available");
+    for (int i = 1; i <= MAX_LOCKERS; i++) {
+        if (i >= 1 && i <= 3) {
+            printf("Locker %d: High-Level Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
+        } else {
+            printf("Locker %d: Normal Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
+        }
     }
 }
 
@@ -107,6 +111,18 @@ int lock_record(int fd, int locker_id, short lock_type) {
     fl.l_whence = SEEK_SET;
     fl.l_len = sizeof(Locker);
     return fcntl(fd, F_SETLKW, &fl);
+}
+
+void give_hint(int locker_id, char *hint) {
+    if (lockers[locker_id].in_use && strlen(lockers[locker_id].items) > 0) {
+        hint[0] = lockers[locker_id].items[0];
+        for (int i = 1; i < strlen(lockers[locker_id].items); i++) {
+            hint[i] = '*';
+        }
+        hint[strlen(lockers[locker_id].items)] = '\0';
+    } else {
+        strcpy(hint, "No items");
+    }
 }
 
 void* handle_client(void* arg) {
@@ -130,7 +146,7 @@ void* handle_client(void* arg) {
         switch (choice) {
             case 1:
                 show_lockers();
-                for (int i = 0; i < MAX_LOCKERS; i++) {
+                for (int i = 1; i <= MAX_LOCKERS; i++) {
                     write(client_socket, &lockers[i], sizeof(Locker));
                 }
                 break;
@@ -179,6 +195,16 @@ void* handle_client(void* arg) {
                 int change_result = change_password(locker_id, password, new_password);
                 write(client_socket, &change_result, sizeof(change_result));
 
+                // 레코드 잠금 해제
+                lock_record(fd, locker_id, F_UNLCK);
+                break;
+            case 5:
+                read(client_socket, &locker_id, sizeof(locker_id));
+                // 레코드 잠금 설정
+                lock_record(fd, locker_id, F_RDLCK);
+                char hint[100];
+                give_hint(locker_id, hint);
+                write(client_socket, hint, sizeof(hint));
                 // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
