@@ -106,7 +106,7 @@ void access_locker(int client_socket) {
         printf("\nAccess to Locker %d granted.\n", locker_id);
         printf("\nStored items >> %s\n", items);
     } else if (result == -1) {
-        printf("\nIncorrect password or code. Locker %d is locked for 15 seconds.\n", locker_id);
+        printf("\nIncorrect password or code. Locker %d is locked for 30 seconds.\n", locker_id);
     } else if (result == -2) {
         printf("\nLocker %d is locked. Try again later.\n", locker_id);
     }

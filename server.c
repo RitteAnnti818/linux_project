@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 
 #define MAX_LOCKERS 10
-#define LOCK_TIME 15
+#define LOCK_TIME 30
 #define PORT 12345
 
 typedef struct {
