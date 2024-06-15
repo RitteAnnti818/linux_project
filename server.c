@@ -37,6 +37,7 @@ void* lock_timer(void* arg) {
     int locker_id = *(int*)arg;
     sleep(LOCK_TIME);
     lockers[locker_id].lock_time = 0;
+    printf("Locker %d의 잠금 타이머 해제\n", locker_id);
     return NULL;
 }
 
@@ -51,6 +52,7 @@ void generate_random_code(char *code, size_t length) {
 
 int allocate_locker(int locker_id, const char *password, const char *items, char *code) {
     if (lockers[locker_id].in_use) {
+        printf("Locker %d은(는) 이미 사용 중입니다.\n", locker_id);
         return -1;
     }
     lockers[locker_id].in_use = 1;
@@ -60,11 +62,13 @@ int allocate_locker(int locker_id, const char *password, const char *items, char
         generate_random_code(code, 8);
         strcpy(lockers[locker_id].code, code);
     }
+    printf("Locker %d이(가) 성공적으로 할당되었습니다.\n", locker_id);
     return 0;
 }
 
 int access_locker(int locker_id, const char *password, const char *code, char *items) {
     if (lockers[locker_id].lock_time > 0) {
+        printf("Locker %d은(는) 현재 잠금 상태입니다.\n", locker_id);
         return -2;
     }
     if (strcmp(lockers[locker_id].password, password) != 0 || (locker_id >= 1 && locker_id <= 3 && strcmp(lockers[locker_id].code, code) != 0)) {
@@ -72,9 +76,11 @@ int access_locker(int locker_id, const char *password, const char *code, char *i
         pthread_t tid;
         pthread_create(&tid, NULL, lock_timer, &lockers[locker_id].id);
         pthread_detach(tid);
+        printf("Locker %d의 비밀번호 또는 코드가 잘못되었습니다.\n", locker_id);
         return -1;
     }
     strcpy(items, lockers[locker_id].items); // 물건 정보 반환
+    printf("Locker %d에 접근 성공\n", locker_id);
     return 0;
 }
 
@@ -89,8 +95,10 @@ int store_items(int locker_id, const char *items) {
 int change_password(int locker_id, const char *current_password, const char *new_password) {
     if (strcmp(lockers[locker_id].password, current_password) == 0) {
         strcpy(lockers[locker_id].password, new_password);
+        printf("Locker %d의 비밀번호가 성공적으로 변경되었습니다.\n", locker_id);
         return 0;
     }
+    printf("Locker %d의 현재 비밀번호가 잘못되었습니다.\n", locker_id);
     return -1;
 }
 
@@ -100,13 +108,18 @@ void show_lockers() {
     }
 }
 
-int lock_record(int fd, int locker_id, short lock_type) {
+int lock_record(int fd, int locker_id, short lock_type, int client_id) {
     struct flock fl;
     fl.l_type = lock_type;
     fl.l_start = locker_id * sizeof(Locker);
     fl.l_whence = SEEK_SET;
     fl.l_len = sizeof(Locker);
-    return fcntl(fd, F_SETLKW, &fl);
+    if (fcntl(fd, F_SETLKW, &fl) == -1) {
+        perror("파일 잠금 오류");
+        return -1;
+    }
+    printf("Client %d: Locker %d에 대한 잠금이 %s되었습니다.\n", client_id, locker_id, lock_type == F_WRLCK ? "설정" : "해제");
+    return 0;
 }
 
 void give_hint(int locker_id, char *hint) {
@@ -123,11 +136,12 @@ void give_hint(int locker_id, char *hint) {
 
 void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
+    int client_id = client_socket;  // 클라이언트 ID로 소켓 값을 사용
     free(arg);
     
     int fd = open("lockers.dat", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd == -1) {
-        perror("Error opening lockers.dat");
+        perror("lockers.dat 파일 열기 오류");
         close(client_socket);
         return NULL;
     }
@@ -141,6 +155,7 @@ void* handle_client(void* arg) {
         
         switch (choice) {
             case 1:
+                // 사물함 정보 조회는 잠금이 필요하지 않음
                 show_lockers();
                 for (int i = 0; i < MAX_LOCKERS; i++) {
                     write(client_socket, &lockers[i], sizeof(Locker));
@@ -152,15 +167,24 @@ void* handle_client(void* arg) {
                 read(client_socket, items, sizeof(items));
 
                 // 레코드 잠금 설정
-                lock_record(fd, locker_id, F_WRLCK);
-                int allocate_result = allocate_locker(locker_id, password, items, code);
-                write(client_socket, &allocate_result, sizeof(allocate_result));
-                if (allocate_result == 0 && locker_id >= 1 && locker_id <= 3) {
-                    write(client_socket, code, sizeof(code));
+                if (lock_record(fd, locker_id, F_WRLCK, client_id) == -1) break;
+                printf("Client %d: 클라이언트에서 Locker %d 할당 요청\n", client_id, locker_id);
+
+                // 잠금 후 상태 확인
+                if (lockers[locker_id].in_use) {
+                    printf("Client %d: 잠금 후에도 Locker %d은(는) 이미 사용 중입니다.\n", client_id, locker_id);
+                    int result = -1;
+                    write(client_socket, &result, sizeof(result));
+                } else {
+                    int allocate_result = allocate_locker(locker_id, password, items, code);
+                    write(client_socket, &allocate_result, sizeof(allocate_result));
+                    if (allocate_result == 0 && locker_id >= 1 && locker_id <= 3) {
+                        write(client_socket, code, sizeof(code));
+                    }
                 }
-                
+
                 // 레코드 잠금 해제
-                lock_record(fd, locker_id, F_UNLCK);
+                lock_record(fd, locker_id, F_UNLCK, client_id);
                 break;
             case 3:
                 read(client_socket, &locker_id, sizeof(locker_id));
@@ -170,7 +194,9 @@ void* handle_client(void* arg) {
                 }
 
                 // 레코드 잠금 설정
-                lock_record(fd, locker_id, F_RDLCK);
+                if (lock_record(fd, locker_id, F_RDLCK, client_id) == -1) break;
+                printf("Client %d: 클라이언트에서 Locker %d 접근 요청\n", client_id, locker_id);
+
                 int access_result = access_locker(locker_id, password, locker_id >= 1 && locker_id <= 3 ? code : "", items);
                 write(client_socket, &access_result, sizeof(access_result));
                 if (access_result == 0) {
@@ -178,7 +204,7 @@ void* handle_client(void* arg) {
                 }
 
                 // 레코드 잠금 해제
-                lock_record(fd, locker_id, F_UNLCK);
+                lock_record(fd, locker_id, F_UNLCK, client_id);
                 break;
             case 4:
                 read(client_socket, &locker_id, sizeof(locker_id));
@@ -187,22 +213,23 @@ void* handle_client(void* arg) {
                 read(client_socket, new_password, sizeof(new_password));
 
                 // 레코드 잠금 설정
-                lock_record(fd, locker_id, F_WRLCK);
+                if (lock_record(fd, locker_id, F_WRLCK, client_id) == -1) break;
+                printf("Client %d: 클라이언트에서 Locker %d 비밀번호 변경 요청\n", client_id, locker_id);
                 int change_result = change_password(locker_id, password, new_password);
                 write(client_socket, &change_result, sizeof(change_result));
-
                 // 레코드 잠금 해제
-                lock_record(fd, locker_id, F_UNLCK);
+                lock_record(fd, locker_id, F_UNLCK, client_id);
                 break;
              case 5:
                 read(client_socket, &locker_id, sizeof(locker_id));
                 // 레코드 잠금 설정
-                lock_record(fd, locker_id, F_RDLCK);
+                if (lock_record(fd, locker_id, F_RDLCK, client_id) == -1) break;
+                printf("Client %d: 클라이언트에서 Locker %d 힌트 요청\n", client_id, locker_id);
                 char hint[100];
                 give_hint(locker_id, hint);
                 write(client_socket, hint, sizeof(hint));
                 // 레코드 잠금 해제
-                lock_record(fd, locker_id, F_UNLCK);
+                lock_record(fd, locker_id, F_UNLCK, client_id);
                 break;
                
             default:
@@ -227,7 +254,7 @@ int main() {
     bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
     listen(server_socket, 5);
     
-    printf("Server is running on port %d\n", PORT);
+    printf("서버가 %d 포트에서 실행 중입니다.\n", PORT);
     
     while (1) {
         int client_socket;
@@ -244,3 +271,4 @@ int main() {
     
     return 0;
 }
+
