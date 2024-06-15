@@ -2,168 +2,182 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <pthread.h>
 #include <time.h>
+#include <pthread.h>
+#include <arpa/inet.h>
 
-#define PORT 9999
 #define MAX_LOCKERS 10
-#define BUF_SIZE 1024
-#define CODE_SIZE 8
+#define LOCK_TIME 15
+#define PORT 12345
 
 typedef struct {
-    char code[CODE_SIZE + 1];
-    char password[BUF_SIZE];
-    char content[BUF_SIZE];
-    int high_level; 
+    int id;
+    char password[20];
+    int in_use;
+    int lock_time;
+    char items[100]; // 물건 저장
 } Locker;
 
 Locker lockers[MAX_LOCKERS];
+pthread_mutex_t locker_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void generate_code(char* code, int length) {
-    static const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (int i = 0; i < length; i++) {
-        code[i] = charset[rand() % (sizeof(charset) - 1)];
+void init_server() {
+    for (int i = 0; i < MAX_LOCKERS; i++) {
+        lockers[i].id = i;
+        strcpy(lockers[i].password, "");
+        lockers[i].in_use = 0;
+        lockers[i].lock_time = 0;
+        strcpy(lockers[i].items, ""); // 물건 초기화
     }
-    code[length] = '\0';
+}
+
+void* lock_timer(void* arg) {
+    int locker_id = *(int*)arg;
+    sleep(LOCK_TIME);
+    pthread_mutex_lock(&locker_mutex);
+    lockers[locker_id].lock_time = 0;
+    pthread_mutex_unlock(&locker_mutex);
+    return NULL;
+}
+
+int allocate_locker(int locker_id, const char *password, const char *items) {
+    pthread_mutex_lock(&locker_mutex);
+    if (lockers[locker_id].in_use) {
+        pthread_mutex_unlock(&locker_mutex);
+        return -1;
+    }
+    lockers[locker_id].in_use = 1;
+    strcpy(lockers[locker_id].password, password);
+    strcpy(lockers[locker_id].items, items);
+    pthread_mutex_unlock(&locker_mutex);
+    return 0;
+}
+
+int access_locker(int locker_id, const char *password, char *items) {
+    pthread_mutex_lock(&locker_mutex);
+    if (lockers[locker_id].lock_time > 0) {
+        pthread_mutex_unlock(&locker_mutex);
+        return -2;
+    }
+    if (strcmp(lockers[locker_id].password, password) != 0) {
+        lockers[locker_id].lock_time = LOCK_TIME;
+        pthread_t tid;
+        pthread_create(&tid, NULL, lock_timer, &lockers[locker_id].id);
+        pthread_detach(tid);
+        pthread_mutex_unlock(&locker_mutex);
+        return -1;
+    }
+    strcpy(items, lockers[locker_id].items); // 물건 정보 반환
+    pthread_mutex_unlock(&locker_mutex);
+    return 0;
+}
+
+int store_items(int locker_id, const char *items) {
+    pthread_mutex_lock(&locker_mutex);
+    if (lockers[locker_id].in_use) {
+        strcpy(lockers[locker_id].items, items);
+        pthread_mutex_unlock(&locker_mutex);
+        return 0;
+    }
+    pthread_mutex_unlock(&locker_mutex);
+    return -1;
+}
+
+int change_password(int locker_id, const char *current_password, const char *new_password) {
+    pthread_mutex_lock(&locker_mutex);
+    if (strcmp(lockers[locker_id].password, current_password) == 0) {
+        strcpy(lockers[locker_id].password, new_password);
+        pthread_mutex_unlock(&locker_mutex);
+        return 0;
+    }
+    pthread_mutex_unlock(&locker_mutex);
+    return -1;
+}
+
+void show_lockers() {
+    pthread_mutex_lock(&locker_mutex);
+    for (int i = 0; i < MAX_LOCKERS; i++) {
+        printf("Locker %d: %s\n", i, lockers[i].in_use ? "In Use" : "Available");
+    }
+    pthread_mutex_unlock(&locker_mutex);
 }
 
 void* handle_client(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
-
-    char buffer[BUF_SIZE];
+    
     while (1) {
-        memset(buffer, 0, BUF_SIZE);
-        int read_size = read(client_socket, buffer, BUF_SIZE - 1);
-        if (read_size <= 0) break;
-
-        char command[BUF_SIZE], response[BUF_SIZE];
-        int locker_num;
-        char code[CODE_SIZE + 1], password[BUF_SIZE], content[BUF_SIZE];
-
-        sscanf(buffer, "%s", command);
-
-        if (strcmp(command, "1") == 0) {
-            // printf("Go to LOCKER STATUS ..\n");
-            sleep(1);
-            strcpy(response, "Available lockers\n");
-            for (int i = 0; i < MAX_LOCKERS; i++) {
-                char status[BUF_SIZE];
-                snprintf(status, BUF_SIZE, "(%s) Locker %d: %s\n",
-                         lockers[i].high_level ? "High Level" : "Normal",
-                         i + 1,
-                         lockers[i].content[0] == '\0' ? "Empty" : "Occupied");
-                strcat(response, status);
-            }
-        } else if (strcmp(command, "2") == 0) {            
-            // HOW TO ..?\nEnter your locker number and password set!\n<locker_num> <password>: 
-            sscanf(buffer, "%*s %d %s", &locker_num, password);
-            if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                snprintf(response, BUF_SIZE, "Invalid locker number\n");
-            } else {
-                strcpy(lockers[locker_num - 1].password, password);
-                if (lockers[locker_num - 1].high_level) {
-                    generate_code(lockers[locker_num - 1].code, CODE_SIZE);
-                    snprintf(response, BUF_SIZE, "Password set for locker %d.\nHigh level code: %s\n", locker_num, lockers[locker_num - 1].code);
-                } else {
-                    snprintf(response, BUF_SIZE, "Password set for locker %d\n", locker_num);
-                }
-            }
-        } else if (strcmp(command, "3") == 0) {
-             sscanf(buffer, "%*s %d %s %s %[^\n]", &locker_num, password, code, content);
-            if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                snprintf(response, BUF_SIZE, "Invalid locker number\n");
-            } else if (strcmp(lockers[locker_num - 1].password, password) != 0) {
-                snprintf(response, BUF_SIZE, "Incorrect password\n");
-            } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
-                snprintf(response, BUF_SIZE, "Incorrect high level code\n");
-            } else {
-                strcpy(lockers[locker_num - 1].content, content);
-                snprintf(response, BUF_SIZE, "Stored in locker %d\n", locker_num);
-            }
-        } else if (strcmp(command, "4") == 0) {
-            sscanf(buffer, "%*s %d %s %s", &locker_num, password, code);
-            if (locker_num < 1 || locker_num > MAX_LOCKERS) {
-                snprintf(response, BUF_SIZE, "Invalid locker number\n");
-            } else if (strcmp(lockers[locker_num - 1].password, password) != 0) {
-                snprintf(response, BUF_SIZE, "Incorrect password\n");
-            } else if (lockers[locker_num - 1].high_level && strcmp(lockers[locker_num - 1].code, code) != 0) {
-                snprintf(response, BUF_SIZE, "Incorrect high level code\n");
-            } else {
-                snprintf(response, BUF_SIZE, "Locker %d contains: %.1000s\n", locker_num, lockers[locker_num - 1].content);
-            }
-        }
+        int choice, locker_id;
+        char password[20];
+        char items[100];
+        read(client_socket, &choice, sizeof(choice));
         
-        else {
-            snprintf(response, BUF_SIZE, "Unknown command\n");
+        switch (choice) {
+            case 1:
+                pthread_mutex_lock(&locker_mutex);
+                for (int i = 0; i < MAX_LOCKERS; i++) {
+                    write(client_socket, &lockers[i], sizeof(Locker));
+                }
+                pthread_mutex_unlock(&locker_mutex);
+                break;
+            case 2:
+                read(client_socket, &locker_id, sizeof(locker_id));
+                read(client_socket, password, sizeof(password));
+                read(client_socket, items, sizeof(items));
+                int allocate_result = allocate_locker(locker_id, password, items);
+                write(client_socket, &allocate_result, sizeof(allocate_result));
+                break;
+            case 3:
+                read(client_socket, &locker_id, sizeof(locker_id));
+                read(client_socket, password, sizeof(password));
+                int access_result = access_locker(locker_id, password, items);
+                write(client_socket, &access_result, sizeof(access_result));
+                if (access_result == 0) {
+                    write(client_socket, items, sizeof(items));
+                }
+                break;
+            case 4:
+                read(client_socket, &locker_id, sizeof(locker_id));
+                read(client_socket, password, sizeof(password));
+                char new_password[20];
+                read(client_socket, new_password, sizeof(new_password));
+                int change_result = change_password(locker_id, password, new_password);
+                write(client_socket, &change_result, sizeof(change_result));
+                break;
+            default:
+                close(client_socket);
+                return NULL;
         }
-
-        write(client_socket, response, strlen(response));
     }
-
-    close(client_socket);
-    return NULL;
 }
 
 int main() {
-    srand(time(NULL)); // Initialize random number generator
-
-	// Initialize lockers
-    for (int i = 0; i < MAX_LOCKERS; i++) {
-        lockers[i].high_level = (i < 3) ? 1 : 0; // 1, 2, 3번 사물함을 하이레벨로 설정
-        lockers[i].code[0] = '\0';
-        lockers[i].password[0] = '\0';
-        lockers[i].content[0] = '\0';
-    }
-	
-    int server_socket, client_socket, *new_sock;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_addr_size = sizeof(client_addr);
-
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_socket == -1) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
+    init_server();
+    
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in server_addr;
+    
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);
-
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
-        close(server_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_socket, 5) < 0) {
-        perror("Listen failed");
-        close(server_socket);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Server started on port %d\n", PORT);
-
+    
+    bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    listen(server_socket, 5);
+    
+    printf("Server is running on port %d\n", PORT);
+    
     while (1) {
-        client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_size);
-        if (client_socket < 0) {
-            perror("Accept failed");
-            continue;
-        }
-
-        pthread_t client_thread;
-        new_sock = malloc(sizeof(int));
-        *new_sock = client_socket;
-
-        if (pthread_create(&client_thread, NULL, handle_client, (void*)new_sock) < 0) {
-            perror("Thread creation failed");
-            free(new_sock);
-        }
-
-        pthread_detach(client_thread);
+        int client_socket;
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_len);
+        
+        int *pclient = malloc(sizeof(int));
+        *pclient = client_socket;
+        pthread_t tid;
+        pthread_create(&tid, NULL, handle_client, pclient);
+        pthread_detach(tid);
     }
-
-    close(server_socket);
+    
     return 0;
 }
