@@ -17,12 +17,25 @@ typedef struct {
 } Locker;
 
 void show_menu() {
-    printf("1. 사물함 정보\n");
-    printf("2. 사물함 설정 (비밀번호 및 물건 저장)\n");
-    printf("3. 사물함 접근 (비밀번호 확인 및 물건 반환)\n");
-    printf("4. 비밀번호 변경\n");
-    printf("5. 사물함 힌트 요청\n");
-    printf("6. 종료\n");
+    printf("\n* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
+    printf("==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==\n");
+    printf("1. Locker Information\n");
+    printf("\n2. Set Up Locker (Password and Store Items)\n");
+    printf("\n3. Access Locker (Verify Password and Retrieve Items)\n");
+    printf("\n4. Change Password\n");
+    printf("\n5. Request Locker Hint\n");
+    printf("\n6. Empty Locker\n");
+    printf("\n7. Exit\n");
+    printf("==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==\n");
+    printf("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
+}
+
+void displayLockerInfo(Locker locker) {
+    if (locker.id >= 1 && locker.id <= 3) {
+        printf("Locker %d >> High-Level Locker - %s\n", locker.id, locker.in_use ? "In Use" : "Available");
+    } else {
+        printf("Locker %d >> Normal Locker - %s\n", locker.id, locker.in_use ? "In Use" : "Available");
+    }
 }
 
 void locker_info(int client_socket) {
@@ -31,8 +44,9 @@ void locker_info(int client_socket) {
     Locker lockers[10];
     for (int i = 0; i < 10; i++) {
         read(client_socket, &lockers[i], sizeof(Locker));
-        printf("Locker %d: %s\n", lockers[i].id, lockers[i].in_use ? "In Use" : "Available");
+        displayLockerInfo(lockers[i]);
     }
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
 }
 
 void setup_locker(int client_socket) {
@@ -41,11 +55,11 @@ void setup_locker(int client_socket) {
     char items[100];
     char code[9];
     
-    printf("사물함 번호를 입력하세요 (1~10): ");
+    printf("\nEnter locker number (1~10) >> ");
     scanf("%d", &locker_id);
-    printf("비밀번호를 설정하세요: ");
+    printf("\nSet your password >> ");
     scanf("%s", password);
-    printf("저장할 물건을 입력하세요: ");
+    printf("\nEnter items to store >> ");
     scanf(" %[^\n]", items);
     
     write(client_socket, &choice, sizeof(choice));
@@ -56,14 +70,15 @@ void setup_locker(int client_socket) {
     int result;
     read(client_socket, &result, sizeof(result));
     if (result == 0) {
-        printf("Locker %d successfully set up.\n", locker_id);
+        printf("\nLocker %d successfully set up.\n", locker_id);
         if (locker_id >= 1 && locker_id <= 3) {
             read(client_socket, code, sizeof(code));
-            printf("Your access code is: %s\n", code);
+            printf("\nYour access code is >> %s\n", code);
         }
     } else {
-        printf("Failed to set up Locker %d.\n", locker_id);
+        printf("\nFailed to set up Locker %d.\n", locker_id);
     }
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
 }
 
 void access_locker(int client_socket) {
@@ -72,9 +87,9 @@ void access_locker(int client_socket) {
     char items[100];
     char code[9] = "";
     
-    printf("사물함 번호를 입력하세요 (1~10): ");
+    printf("\nEnter locker number (1-10) >> ");
     scanf("%d", &locker_id);
-    printf("비밀번호를 입력하세요: ");
+    printf("\nEnter your password >> ");
     scanf("%s", password);
     
     write(client_socket, &choice, sizeof(choice));
@@ -82,7 +97,7 @@ void access_locker(int client_socket) {
     write(client_socket, password, sizeof(password));
     
     if (locker_id >= 1 && locker_id <= 3) {
-        printf("Access code를 입력하세요: ");
+        printf("\nEnter access code >> ");
         scanf("%s", code);
         write(client_socket, code, sizeof(code));
     }
@@ -91,30 +106,31 @@ void access_locker(int client_socket) {
     read(client_socket, &result, sizeof(result));
     if (result == 0) {
         read(client_socket, items, sizeof(items));
-        printf("Access to Locker %d granted.\n", locker_id);
-        printf("Stored items: %s\n", items);
+        printf("\nAccess to Locker %d granted.\n", locker_id);
+        printf("\nStored items >> %s\n", items);
     } else if (result == -1) {
-        printf("Incorrect password or code. Locker %d is locked for 15 seconds.\n", locker_id);
+        printf("\nIncorrect password or code. Locker %d is locked for 30 seconds.\n", locker_id);
     } else if (result == -2) {
-        printf("Locker %d is locked. Try again later.\n", locker_id);
+        printf("\nLocker %d is locked. Try again later.\n", locker_id);
     }
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
 }
 
 void change_password(int client_socket) {
     int choice = 4, locker_id;
     char current_password[20], new_password[20], confirm_password[20];
     
-    printf("사물함 번호를 입력하세요: ");
+    printf("\nEnter locker number >> ");
     scanf("%d", &locker_id);
-    printf("현재 비밀번호를 입력하세요: ");
+    printf("\nEnter current password >> ");
     scanf("%s", current_password);
-    printf("새로운 비밀번호를 입력하세요: ");
+    printf("\nEnter new password >> ");
     scanf("%s", new_password);
-    printf("비밀번호 확인을 입력하세요: ");
+    printf("\nConfirm new password >> ");
     scanf("%s", confirm_password);
     
     if (strcmp(new_password, confirm_password) != 0) {
-        printf("비밀번호가 일치하지 않습니다.\n");
+        printf("\nPasswords do not match.\n");
         return;
     }
     
@@ -126,15 +142,16 @@ void change_password(int client_socket) {
     int result;
     read(client_socket, &result, sizeof(result));
     if (result == 0) {
-        printf("비밀번호가 성공적으로 변경되었습니다.\n");
+        printf("\nPassword successfully changed.\n");
     } else {
-        printf("비밀번호 변경에 실패했습니다.\n");
+        printf("\nFailed to change password.\n");
     }
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
 }
 
 void request_hint(int client_socket) {
     int choice = 5, locker_id;
-    printf("사물함 번호를 입력하세요: ");
+    printf("\nEnter locker number >> ");
     scanf("%d", &locker_id);
     
     write(client_socket, &choice, sizeof(choice));
@@ -142,7 +159,40 @@ void request_hint(int client_socket) {
     
     char hint[100];
     read(client_socket, hint, sizeof(hint));
-    printf("Hint for locker %d: %s\n", locker_id, hint);
+    printf("\nHint for locker %d >> %s\n", locker_id, hint);
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+}
+
+void empty_locker(int client_socket) {
+    int choice = 6, locker_id;
+    char password[20];
+    char code[9] = "";
+    
+    printf("\nEnter locker number (1-10) >> ");
+    scanf("%d", &locker_id);
+    printf("\nEnter your password >> ");
+    scanf("%s", password);
+    
+    write(client_socket, &choice, sizeof(choice));
+    write(client_socket, &locker_id, sizeof(locker_id));
+    write(client_socket, password, sizeof(password));
+    
+    if (locker_id >= 1 && locker_id <= 3) {
+        printf("\nEnter access code >> ");
+        scanf("%s", code);
+        write(client_socket, code, sizeof(code));
+    }
+    
+    int result;
+    read(client_socket, &result, sizeof(result));
+    if (result == 0) {
+        printf("\nLocker %d is empty now.\n", locker_id);
+    } else if (result == -1) {
+        printf("\nIncorrect password or code. Locker %d is locked for 30 seconds.\n", locker_id);
+    } else if (result == -2) {
+        printf("\nLocker %d is locked. Try again later.\n", locker_id);
+    }
+    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
 }
 
 int main() {
@@ -155,10 +205,12 @@ int main() {
     
     connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
     
-    int choice;
+    int choice; 
+    printf("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n");
+    printf("\n* * * * * * * * * * * WELCOME TO LOCKER SERVICE!! * * * * * * * * * * *\n");
     while (1) {
         show_menu();
-        printf("선택하세요: ");
+        printf("\nChoose an option >> ");
         scanf("%d", &choice);
         
         switch (choice) {
@@ -178,10 +230,13 @@ int main() {
                 request_hint(client_socket);
                 break;
             case 6:
+                empty_locker(client_socket);
+                break;
+            case 7:
                 close(client_socket);
                 exit(0);
             default:
-                printf("잘못된 선택입니다.\n");
+                printf("\nInvalid choice.\n");
         }
     }
     
