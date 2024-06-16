@@ -23,7 +23,7 @@ void show_menu() {
     printf("\n2. Set Up Locker (Password and Store Items)\n");
     printf("\n3. Access Locker (Verify Password and Retrieve Items)\n");
     printf("\n4. Change Password\n");
-    printf("\n5. Request Locker Hint\n");
+    printf("\n5. Request content Hint\n");
     printf("\n6. Empty Locker\n");
     printf("\n7. Exit\n");
     printf("==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==  ==\n");
@@ -33,6 +33,8 @@ void show_menu() {
 void displayLockerInfo(Locker locker) {
     if (locker.id >= 1 && locker.id <= 3) {
         printf("Locker %d >> High-Level Locker - %s\n", locker.id, locker.in_use ? "In Use" : "Available");
+    } else if (locker.id >= 4 && locker.id <= 6) {
+        printf("Locker %d >> Large Locker - %s\n", locker.id, locker.in_use ? "In Use" : "Available");
     } else {
         printf("Locker %d >> Normal Locker - %s\n", locker.id, locker.in_use ? "In Use" : "Available");
     }
@@ -50,7 +52,7 @@ void locker_info(int client_socket) {
 }
 
 void setup_locker(int client_socket) {
-    int choice = 2, locker_id;
+    int choice = 2, locker_id, item_count;
     char password[20];
     char items[100];
     char code[9];
@@ -59,13 +61,27 @@ void setup_locker(int client_socket) {
     scanf("%d", &locker_id);
     printf("\nSet your password >> ");
     scanf("%s", password);
-    printf("\nEnter items to store >> ");
-    scanf(" %[^\n]", items);
-    
-    write(client_socket, &choice, sizeof(choice));
-    write(client_socket, &locker_id, sizeof(locker_id));
-    write(client_socket, password, sizeof(password));
-    write(client_socket, items, sizeof(items));
+    if (locker_id >= 4 && locker_id <= 6) {
+        printf("\nEnter the number of items to store >> ");
+        scanf("%d", &item_count);
+        write(client_socket, &choice, sizeof(choice));
+        write(client_socket, &locker_id, sizeof(locker_id));
+        write(client_socket, password, sizeof(password));
+        write(client_socket, &item_count, sizeof(item_count));
+        for (int i = 0; i < item_count; i++) {
+            char item[20];
+            printf("\nEnter item %d >> ", i+1);
+            scanf("%s", item);
+            write(client_socket, item, sizeof(item));
+        }
+    } else {
+        printf("\nEnter items to store >> ");
+        scanf(" %[^\n]", items);
+        write(client_socket, &choice, sizeof(choice));
+        write(client_socket, &locker_id, sizeof(locker_id));
+        write(client_socket, password, sizeof(password));
+        write(client_socket, items, sizeof(items));
+    }
     
     int result;
     read(client_socket, &result, sizeof(result));

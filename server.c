@@ -98,6 +98,8 @@ void show_lockers() {
     for (int i = 1; i <= MAX_LOCKERS; i++) {
         if (i >= 1 && i <= 3) {
             printf("Locker %d: High-Level Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
+        } else if (i >= 4 && i <= 6) {
+            printf("Locker %d: Large Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
         } else {
             printf("Locker %d: Normal Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
         }
@@ -113,13 +115,28 @@ int lock_record(int fd, int locker_id, short lock_type) {
     return fcntl(fd, F_SETLKW, &fl);
 }
 
+// 수정된 give_hint 함수
 void give_hint(int locker_id, char *hint) {
     if (lockers[locker_id].in_use && strlen(lockers[locker_id].items) > 0) {
-        hint[0] = lockers[locker_id].items[0];
-        for (int i = 1; i < strlen(lockers[locker_id].items); i++) {
-            hint[i] = '*';
+        int pos = 0;
+        char items[100];
+        strcpy(items, lockers[locker_id].items);
+        
+        // 각 단어를 공백을 기준으로 나누기
+        char *token = strtok(items, " ");
+        while (token != NULL) {
+            // 첫 글자 저장
+            hint[pos++] = token[0];
+            // 나머지 글자는 '*'로 변경
+            for (int i = 1; i < strlen(token); i++) {
+                hint[pos++] = '*';
+            }
+            // 단어 사이의 공백 추가
+            hint[pos++] = ' ';
+            token = strtok(NULL, " ");
         }
-        hint[strlen(lockers[locker_id].items)] = '\0';
+        // 마지막 공백을 제거
+        hint[pos - 1] = '\0';
     } else {
         strcpy(hint, "No items");
     }
@@ -155,7 +172,7 @@ void* handle_client(void* arg) {
     }
     
     while (1) {
-        int choice, locker_id;
+        int choice, locker_id, item_count;
         char password[20];
         char items[100];
         char code[9];
@@ -171,7 +188,20 @@ void* handle_client(void* arg) {
             case 2:
                 read(client_socket, &locker_id, sizeof(locker_id));
                 read(client_socket, password, sizeof(password));
-                read(client_socket, items, sizeof(items));
+                if (locker_id >= 4 && locker_id <= 6) {
+                    read(client_socket, &item_count, sizeof(item_count));
+                    strcpy(items, "");
+                    for (int i = 0; i < item_count; i++) {
+                        char item[20];
+                        read(client_socket, item, sizeof(item));
+                        strcat(items, item);
+                        if (i < item_count - 1) {
+                            strcat(items, " ");
+                        }
+                    }
+                } else {
+                    read(client_socket, items, sizeof(items));
+                }
 
                 // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_WRLCK);
