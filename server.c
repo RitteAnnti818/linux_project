@@ -94,18 +94,6 @@ int change_password(int locker_id, const char *current_password, const char *new
     return -1;
 }
 
-void show_lockers() {
-    for (int i = 1; i <= MAX_LOCKERS; i++) {
-        if (i >= 1 && i <= 3) {
-            printf("Locker %d: High-Level Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
-        } else if (i >= 4 && i <= 6) {
-            printf("Locker %d: Large Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
-        } else {
-            printf("Locker %d: Normal Locker - %s\n", i, lockers[i].in_use ? "In Use" : "Available");
-        }
-    }
-}
-
 int lock_record(int fd, int locker_id, short lock_type) {
     struct flock fl;
     fl.l_type = lock_type;
@@ -180,7 +168,6 @@ void* handle_client(void* arg) {
         
         switch (choice) {
             case 1:
-                show_lockers();
                 for (int i = 1; i <= MAX_LOCKERS; i++) {
                     write(client_socket, &lockers[i], sizeof(Locker));
                 }
