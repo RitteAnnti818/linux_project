@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 
 #define SERVER_ADDRESS "127.0.0.1"
-#define PORT 12345
+#define PORT 23
 
 typedef struct {
     int id;
@@ -13,7 +13,7 @@ typedef struct {
     int in_use;
     int lock_time;
     char items[100];
-    char code[9];    // highlevel locker 코드
+    char code[9];    
 } Locker;
 
 void show_menu() {
@@ -48,7 +48,7 @@ void locker_info(int client_socket) {
         read(client_socket, &lockers[i], sizeof(Locker));
         displayLockerInfo(lockers[i]);
     }
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 void setup_locker(int client_socket) {
@@ -94,7 +94,7 @@ void setup_locker(int client_socket) {
     } else {
         printf("\nFailed to set up Locker %d.\n", locker_id);
     }
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 void access_locker(int client_socket) {
@@ -129,7 +129,7 @@ void access_locker(int client_socket) {
     } else if (result == -2) {
         printf("\nLocker %d is locked. Try again later.\n", locker_id);
     }
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 void change_password(int client_socket) {
@@ -162,7 +162,7 @@ void change_password(int client_socket) {
     } else {
         printf("\nFailed to change password.\n");
     }
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 void request_hint(int client_socket) {
@@ -176,7 +176,7 @@ void request_hint(int client_socket) {
     char hint[100];
     read(client_socket, hint, sizeof(hint));
     printf("\nHint for locker %d >> %s\n", locker_id, hint);
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 void empty_locker(int client_socket) {
@@ -208,7 +208,7 @@ void empty_locker(int client_socket) {
     } else if (result == -2) {
         printf("\nLocker %d is locked. Try again later.\n", locker_id);
     }
-    sleep(1); // 메뉴로 돌아가기 전에 1초 대기
+    sleep(1); 
 }
 
 int main() {

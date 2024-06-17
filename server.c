@@ -9,15 +9,15 @@
 
 #define MAX_LOCKERS 10
 #define LOCK_TIME 30
-#define PORT 12345
+#define PORT 23
 
 typedef struct {
     int id;
     char password[20];
     int in_use;
     int lock_time;
-    char items[100]; // 물건 저장
-    char code[9];    // highlevel locker 코드
+    char items[100]; 
+    char code[9];   
 } Locker;
 
 Locker lockers[MAX_LOCKERS];
@@ -28,8 +28,8 @@ void init_server() {
         strcpy(lockers[i].password, "");
         lockers[i].in_use = 0;
         lockers[i].lock_time = 0;
-        strcpy(lockers[i].items, ""); // 물건 초기화
-        strcpy(lockers[i].code, "");  // 코드 초기화
+        strcpy(lockers[i].items, ""); 
+        strcpy(lockers[i].code, "");  
     }
 }
 
@@ -74,7 +74,7 @@ int access_locker(int locker_id, const char *password, const char *code, char *i
         pthread_detach(tid);
         return -1;
     }
-    strcpy(items, lockers[locker_id].items); // 물건 정보 반환
+    strcpy(items, lockers[locker_id].items); 
     return 0;
 }
 
@@ -103,27 +103,21 @@ int lock_record(int fd, int locker_id, short lock_type) {
     return fcntl(fd, F_SETLKW, &fl);
 }
 
-// 수정된 give_hint 함수
 void give_hint(int locker_id, char *hint) {
     if (lockers[locker_id].in_use && strlen(lockers[locker_id].items) > 0) {
         int pos = 0;
         char items[100];
         strcpy(items, lockers[locker_id].items);
         
-        // 각 단어를 공백을 기준으로 나누기
         char *token = strtok(items, " ");
         while (token != NULL) {
-            // 첫 글자 저장
             hint[pos++] = token[0];
-            // 나머지 글자는 '*'로 변경
             for (int i = 1; i < strlen(token); i++) {
                 hint[pos++] = '*';
             }
-            // 단어 사이의 공백 추가
             hint[pos++] = ' ';
             token = strtok(NULL, " ");
         }
-        // 마지막 공백을 제거
         hint[pos - 1] = '\0';
     } else {
         strcpy(hint, "No items");
@@ -190,7 +184,6 @@ void* handle_client(void* arg) {
                     read(client_socket, items, sizeof(items));
                 }
 
-                // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_WRLCK);
                 int allocate_result = allocate_locker(locker_id, password, items, code);
                 write(client_socket, &allocate_result, sizeof(allocate_result));
@@ -198,7 +191,6 @@ void* handle_client(void* arg) {
                     write(client_socket, code, sizeof(code));
                 }
                 
-                // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 3:
@@ -208,7 +200,6 @@ void* handle_client(void* arg) {
                     read(client_socket, code, sizeof(code));
                 }
 
-                // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_RDLCK);
                 int access_result = access_locker(locker_id, password, locker_id >= 1 && locker_id <= 3 ? code : "", items);
                 write(client_socket, &access_result, sizeof(access_result));
@@ -216,7 +207,6 @@ void* handle_client(void* arg) {
                     write(client_socket, items, sizeof(items));
                 }
 
-                // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 4:
@@ -225,22 +215,18 @@ void* handle_client(void* arg) {
                 char new_password[20];
                 read(client_socket, new_password, sizeof(new_password));
 
-                // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_WRLCK);
                 int change_result = change_password(locker_id, password, new_password);
                 write(client_socket, &change_result, sizeof(change_result));
 
-                // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 5:
                 read(client_socket, &locker_id, sizeof(locker_id));
-                // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_RDLCK);
                 char hint[100];
                 give_hint(locker_id, hint);
                 write(client_socket, hint, sizeof(hint));
-                // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
             case 6:
@@ -250,12 +236,10 @@ void* handle_client(void* arg) {
                     read(client_socket, code, sizeof(code));
                 }
                 
-                // 레코드 잠금 설정
                 lock_record(fd, locker_id, F_WRLCK);
                 int empty_result = empty_locker(locker_id, password, locker_id >= 1 && locker_id <= 3 ? code : "");
                 write(client_socket, &empty_result, sizeof(empty_result));
                 
-                // 레코드 잠금 해제
                 lock_record(fd, locker_id, F_UNLCK);
                 break;
             default:
